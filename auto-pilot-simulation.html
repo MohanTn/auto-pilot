@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto-pilot: PRD to verified MR (simulation)</title>
+<style>
+:root{--bg:#0e1117;--panel:#161b24;--panel2:#1c2330;--line:#2a3345;--txt:#e7eaf0;--mut:#8a94a8;--ok:#3ecf8e;--bad:#ff6b6b;--warn:#f5b84b;--info:#5aa9ff;--acc:#a78bfa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line)}
+h1{font-size:16px;margin:0}
+h1 small{display:block;color:var(--mut);font-weight:400;font-size:12px}
+.controls{display:flex;gap:8px;align-items:center}
+button,select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#14101f;border-color:var(--acc);font-weight:600}
+.stepper{display:flex;gap:6px;padding:12px 20px;overflow-x:auto}
+.st{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:var(--mut);background:var(--panel);transition:.3s}
+.st b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.st.done{color:var(--ok);border-color:#1f5c43}
+.st.cur{color:var(--txt);border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.caption{margin:0 20px 12px;padding:10px 14px;background:var(--panel);border-left:3px solid var(--acc);border-radius:4px;min-height:44px}
+.bar{height:3px;background:var(--line);margin:0 20px 14px;border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .4s}
+main{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 20px 20px}
+main>div{display:flex;flex-direction:column;gap:14px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{margin:0 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card h4{margin:14px 0 4px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.hidden{display:none}
+.reveal{opacity:0;transform:translateY(6px);transition:opacity .5s,transform .5s}
+.reveal.show{opacity:1;transform:none}
+.prd-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.prd-head .t{font-size:16px;font-weight:600}
+.meta{color:var(--mut);font-size:12px}
+.chip{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap;transition:background-color .3s,color .3s,border-color .3s}
+.chip.ready{color:var(--info);border-color:#25507c}
+.chip.lintfail{color:var(--warn);border-color:#7a5a1d;background:#2a2212}
+.chip.locked{color:var(--acc);border-color:#5b4a96}
+.chip.running{color:var(--warn);border-color:#7a5a1d;animation:pulse 1s infinite}
+.chip.pass{color:#06210f;background:var(--ok);border-color:var(--ok)}
+.chip.fail{color:#2b0707;background:var(--bad);border-color:var(--bad)}
+.chip.review{color:var(--warn);border-color:#7a5a1d}
+.chip.approved{color:#06210f;background:var(--ok);border-color:var(--ok)}
+.chip.pending{color:var(--mut)}
+@keyframes pulse{50%{opacity:.45}}
+.cond{display:grid;grid-template-columns:34px 56px 1fr auto;gap:8px;align-items:start;padding:7px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;background:var(--panel2)}
+.cond b{color:var(--acc)}
+.cond .tag{font-size:10px;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:0 4px;text-align:center}
+.cond p{margin:0}
+.flash{animation:flash 1.6s}
+@keyframes flash{0%,60%{background:#3a3414}100%{background:var(--panel2)}}
+.hl{box-shadow:0 0 0 1px var(--warn) inset}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid var(--line);padding:4px 8px;text-align:left;font-size:12px}
+th{color:var(--mut);font-weight:500}
+ul{margin:4px 0;padding-left:18px}
+li.new{animation:flash 1.6s}
+.lint div,.thread .msg{animation:pop .4s both}
+@keyframes pop{from{opacity:0;transform:translateY(4px)}}
+.lint div{font-size:12px;padding:1px 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.mut{color:var(--mut)}.warn{color:var(--warn)}
+.link{display:flex;gap:8px;align-items:center;padding:8px 10px;background:var(--panel2);border:1px dashed var(--acc);border-radius:6px;margin:6px 0;word-break:break-all}
+.reviewers{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.rv{display:flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.avatar{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#10131a}
+.msg{padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel2)}
+.msg.resolved{opacity:.55}
+.msg small{color:var(--mut)}
+.gate{margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--panel2);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.meters{display:flex;gap:12px;font-size:12px;color:var(--mut);flex-wrap:wrap;text-transform:none;letter-spacing:0}
+.meters b{color:var(--txt)}
+.budget{height:4px;background:var(--line);border-radius:2px;margin:8px 0;overflow:hidden}
+.budget i{display:block;height:100%;width:0;background:var(--info);transition:width .5s}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.col{background:var(--panel2);border-radius:6px;padding:6px;min-height:92px}
+.col h5{margin:0 0 6px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.job{padding:5px 7px;border-radius:5px;border:1px solid var(--line);background:var(--panel);margin-bottom:5px;font-size:12px;animation:pop .4s both}
+.job small{display:block;color:var(--mut)}
+.job.running{border-color:var(--warn)}
+.job.blocked{border-color:var(--bad)}
+.job.done{border-color:#1f5c43}
+.inbox{margin-top:8px;padding:10px;border:1px solid var(--bad);border-radius:8px;background:#2a1517;animation:pop .4s both}
+.inbox.answered{border-color:var(--ok);background:#13261d}
+#log{margin-top:10px;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:8px;height:230px;overflow:auto;font-size:12px}
+#log div{padding:1px 0;animation:pop .3s both}
+#log .t{color:#566074;margin-right:8px}
+#log .ag{display:inline-block;min-width:78px;margin-right:6px;font-weight:600}
+.stamp{margin-top:10px;padding:10px;border:1px solid var(--ok);border-radius:8px;background:#13261d}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tile{background:var(--panel2);border-radius:8px;padding:8px 10px}
+.tile b{display:block;font-size:20px}
+.tile span{color:var(--mut);font-size:11px}
+.ci{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cirow{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2)}
+details{margin:0 20px 24px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+summary{cursor:pointer;font-weight:600}
+pre{background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px}
+details table{margin:8px 0}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Auto-pilot simulation<small>GitLab, Copilot CLI per engineer, built in .NET and React. PRD, peer review, local agent loop, CI re-verify, shared dashboard. All names and numbers are illustrative.</small></h1>
+  <div class="controls">
+    <button id="bPlay" class="primary">Pause</button>
+    <button id="bStep">Step</button>
+    <button id="bRestart">Restart</button>
+    <select id="sSpeed" aria-label="Speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+  </div>
+</header>
+<div class="stepper" id="stepper"></div>
+<div class="caption" id="caption"></div>
+<div class="bar"><i id="progress"></i></div>
+
+<main>
+  <section class="card" id="prd"></section>
+  <div>
+    <section class="card" id="cardReview">
+      <h3><span>PRD review (GitLab MR)</span><span class="chip pending" id="rvStatus">not shared</span></h3>
+      <div class="lint" id="lint"></div>
+      <div id="shareBox" class="hidden">
+        <div class="link"><span>Share</span><code id="shareLink">gitlab.acme.dev/product-prds/-/merge_requests/142</code></div>
+        <div class="reviewers" id="reviewers"></div>
+        <div class="thread" id="thread"></div>
+        <div class="gate"><span id="gateA">Approvals 0 of 2 required</span><span id="gateT">Unresolved threads 0</span></div>
+      </div>
+    </section>
+    <section class="card hidden" id="cardLoop">
+      <h3><span>Agent loop (on the authors machine)</span>
+        <span class="meters"><span>Round <b id="mRound">0</b>/3</span><span>Turns <b id="mTurns">0</b></span><span>AI credits <b id="mCost">0.00</b> of 5 cap</span></span></h3>
+      <div class="budget"><i id="budget"></i></div>
+      <div class="board" id="board"></div>
+      <div id="inbox"></div>
+      <div id="log" class="mono"></div>
+    </section>
+    <section class="card hidden" id="cardMr">
+      <h3><span>Code MR with evidence</span><span class="chip review" id="mrStatus">awaiting human</span></h3>
+      <div id="mrBody"></div>
+    </section>
+    <section class="card hidden" id="cardDash">
+      <h3><span>Team dashboard (React)</span><span class="mut" style="text-transform:none;letter-spacing:0">live from POST /api/events</span></h3>
+      <div class="tiles" id="tiles"></div>
+      <table style="margin-top:8px"><tr><th>PRD</th><th>Who</th><th>State</th><th>Round</th><th>Credits</th><th>Note</th></tr><tbody id="dashRows"></tbody></table>
+    </section>
+  </div>
+</main>
+
+<details open>
+  <summary>How the tool is built and who runs what (.NET and React, GitLab, Copilot CLI)</summary>
+  <pre>autopilot/
+  src/AutoPilot.Core/        PRD parser and lint, gate rules, job planner, loop controller, evidence model
+  src/AutoPilot.GitLab/      IGitHost for GitLab: MRs, approvals, threads, branches
+  src/AutoPilot.Runners/     IAgentRunner: CopilotCliRunner (copilot -p), other runners later
+  src/AutoPilot.Cli/         dotnet tool: autopilot lint | gate | run | verify
+  src/AutoPilot.Api/         ASP.NET Core: POST /api/events, GET /api/runs, Postgres via EF Core
+  web/dashboard/             React + TypeScript (Vite): runs, blocked questions, pass rate, credits
+  tests/                     xUnit for Core and the GitLab adapter, Vitest for the dashboard</pre>
+  <table>
+    <tr><th>Command</th><th>Runs where</th><th>Credential</th></tr>
+    <tr><td><code>autopilot lint</code></td><td>GitLab CI on the PRD MR</td><td>CI job token, no model needed</td></tr>
+    <tr><td><code>autopilot gate</code> and <code>autopilot run</code></td><td>The authors laptop or dev container</td><td>The authors own Copilot seat and GitLab token</td></tr>
+    <tr><td><code>autopilot verify</code></td><td>GitLab CI on the code MR, a required job</td><td>CI job token. It re-runs the PRD checks, so no model is needed</td></tr>
+    <tr><td>API and dashboard</td><td>One internal server</td><td>A service account. The CLI sends events with an ingest token</td></tr>
+  </table>
+  <pre># .gitlab-ci.yml in the PRD repo
+prd-lint:
+  rules: [{changes: ["prds/**"]}]
+  script: dotnet autopilot lint prds/
+
+# .gitlab-ci.yml in the product repo, marked required on the MR
+autopilot-verify:
+  script: dotnet autopilot verify --prd-hash $PRD_HASH   # hash read from the MR description</pre>
+  <ol>
+    <li>Author writes the PRD and opens an MR. CI lint blocks vague conditions. Reviewers approve and the MR merges, which freezes the file.</li>
+    <li>Author runs <code>autopilot run</code> locally. The gate refuses to start unless GitLab shows the PRD merged, approved and unchanged.</li>
+    <li>The CLI sends events to the API, so every local run shows up on the shared dashboard. Blocked questions ping the team.</li>
+    <li>The required CI job repeats the checks on a clean runner. A human approves and merges the code MR.</li>
+  </ol>
+  <p class="meta">Check before relying on this: your Copilot admin policy must allow the CLI, and per-run credit numbers depend on what the CLI reports.</p>
+</details>
+
+<script>
+const $=s=>document.querySelector(s);
+const STAGES=['Write PRD','Peer review','Approve and freeze','Build','Verify','Evidence MR','CI re-verify'];
+const COND0=[
+{id:'C1',kind:'API',chk:'xunit',text:'POST /api/users {email, name, role} creates a row and returns 201 with the new id. A duplicate email returns 409.',ev:'UsersApiTests.Create_returns_201, Create_duplicate_returns_409 (xUnit)'},
+{id:'C2',kind:'API',chk:'xunit',text:'GET /api/users returns the users.',ev:'UsersApiTests.List_hides_soft_deleted_newest_first (xUnit)'},
+{id:'C3',kind:'API',chk:'xunit',text:'PATCH /api/users/:id updates name and role and returns 200. An unknown id returns 404.',ev:'UsersApiTests.Update_200_and_unknown_404 (xUnit)'},
+{id:'C4',kind:'API+DB',chk:'xunit + db-assert',text:'DELETE /api/users/:id sets deleted_at and returns 204. The row stays in the table. Deleting an already deleted user returns 404.',ev:'UsersApiTests.Delete_sets_DeletedAt_row_remains (xUnit + DB assert)'},
+{id:'C5',kind:'API',chk:'xunit',text:'An invalid email on POST or PATCH returns 422 with a field error.',ev:'UsersApiTests.Invalid_email_returns_422 (xUnit)'},
+{id:'C6',kind:'UI',chk:'playwright',text:'The Users page shows a table and a New user form. Submitting calls POST and the new row appears without a reload.',ev:'users-page.spec: create adds row (Playwright)'},
+{id:'C7',kind:'UI',chk:'playwright',text:'Edit opens the form prefilled. Save calls PATCH and the row updates.',ev:'users-page.spec: edit prefilled, save patches (Playwright)'},
+{id:'C8',kind:'UI+DB',chk:'playwright + db-assert',text:'Delete asks for confirmation, calls DELETE and the row disappears. After a reload it is still gone and the database row still exists.',ev:'users-page.spec: delete, reload, DB row present (Playwright + DB assert)'}];
+const C2_FIXED='GET /api/users returns only rows where deleted_at IS NULL, newest first.';
+const JOBS0=[
+{id:'J1',title:'EF Core migration: users with deleted_at',agent:'db-agent',c:'C4',s:'queued'},
+{id:'J2',title:'UsersController: POST, GET, PATCH, DELETE',agent:'api-agent',c:'C1-C5',s:'queued'},
+{id:'J3',title:'React Users page: table, forms, delete',agent:'ui-agent',c:'C6-C8',s:'queued'},
+{id:'J4',title:'xUnit and Playwright tests per condition',agent:'test-agent',c:'C1-C8',s:'queued'}];
+const AGC={planner:'#a78bfa','db-agent':'#5aa9ff','api-agent':'#3ecf8e','ui-agent':'#f5b84b','test-agent':'#ff9d5c',verifier:'#ff6bd6',loop:'#8a94a8',human:'#ffffff',pipeline:'#8a94a8',gate:'#a78bfa',runner:'#8a94a8',ci:'#5aa9ff'};
+const LABEL={draft:'draft',lintfail:'not testable',ready:'testable',locked:'frozen',running:'checking',pass:'pass',fail:'fail'};
+const REVIEWERS=[{n:'Asha',r:'Backend',c:'#5aa9ff'},{n:'Ben',r:'Frontend',c:'#f5b84b'},{n:'Chen',r:'Platform',c:'#3ecf8e'}];
+const RUNS0=[
+{prd:'PRD-139',who:'Asha',state:'done',round:2,credits:2.10,note:'MR !51 merged'},
+{prd:'PRD-140',who:'Ben',state:'blocked',round:1,credits:0.94,note:'question waiting 2h'},
+{prd:'PRD-141',who:'Chen',state:'running',round:1,credits:0.55,note:'J2 running'}];
+const DSTATE={queued:'pending',running:'running',blocked:'fail',verifying:'review',ready:'pass',done:'pass'};
+
+let conds,jobs,runs,idx,timer,playing,speed=1,gen=0,clock,approvals,threadsOpen,thr;
+
+function later(fn,ms){const g=gen;setTimeout(()=>{if(g===gen)fn();},ms/speed);}
+function show(id,delay){const e=$('#'+id);if(!e)return;if(delay)e.style.transitionDelay=delay+'s';e.classList.add('show');}
+function setStage(i){document.querySelectorAll('.st').forEach((e,n)=>{e.className='st'+(n<i?' done':n===i?' cur':'');});}
+function caption(t){$('#caption').textContent=t;}
+function setChip(id,s){const c=$('#c-'+id+' .chip');c.className='chip '+s;c.textContent=LABEL[s];}
+function setText(id,t){const e=$('#c-'+id);e.querySelector('p').textContent=t;e.classList.remove('flash');void e.offsetWidth;e.classList.add('flash');}
+function allChips(s,delayEach){conds.forEach((c,i)=>delayEach?later(()=>setChip(c.id,s),i*160):setChip(c.id,s));}
+function showCard(n){['Review','Loop','Mr'].forEach(k=>$('#card'+k).classList.toggle('hidden',k!==n));}
+function mm(){const m=Math.floor(clock/60),s=clock%60;return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+function log(ag,msg){clock+=2;const d=document.createElement('div');d.innerHTML='<span class="t">'+mm()+'</span><span class="ag" style="color:'+AGC[ag]+'">'+ag+'</span>'+msg;const l=$('#log');l.appendChild(d);l.scrollTop=l.scrollHeight;}
+function meters(round,turns,cost){$('#mRound').textContent=round;$('#mTurns').textContent=turns;$('#mCost').textContent=cost.toFixed(2);$('#budget').style.width=Math.min(100,cost/5*100)+'%';}
+function lint(msg,cls){const d=document.createElement('div');d.className=cls;d.style.animationDelay='0s';d.textContent=msg;$('#lint').appendChild(d);}
+function setJob(id,s){jobs.find(j=>j.id===id).s=s;renderJobs();}
+function renderJobs(){
+  const cols={queued:'Queued',running:'Running',blocked:'Blocked',done:'Done'};
+  $('#board').innerHTML=Object.keys(cols).map(k=>'<div class="col"><h5>'+cols[k]+'</h5>'+jobs.filter(j=>j.s===k).map(j=>'<div class="job '+k+'"><b>'+j.id+'</b> '+j.title+'<small>'+j.agent+' · '+j.c+'</small></div>').join('')+'</div>').join('');
+}
+function renderReviewers(){
+  $('#reviewers').innerHTML=REVIEWERS.map((r,i)=>'<div class="rv"><span class="avatar" style="background:'+r.c+'">'+r.n[0]+'</span><span>'+r.n+' <span class="mut">'+r.r+'</span></span><span class="chip '+(approvals[i]?'approved':'pending')+'">'+(approvals[i]?'approved':'pending')+'</span></div>').join('');
+  const n=approvals.filter(Boolean).length;
+  $('#gateA').innerHTML='Approvals <b class="'+(n>=2?'ok':'warn')+'">'+n+' of 2 required</b>';
+  $('#gateT').innerHTML='Unresolved threads <b class="'+(threadsOpen?'warn':'ok')+'">'+threadsOpen+'</b>';
+}
+function say(who,color,text){const d=document.createElement('div');d.className='msg';d.innerHTML='<small style="color:'+color+'">'+who+'</small><br>'+text;$('#thread').appendChild(d);return d;}
+function resolve(d){d.classList.add('resolved');threadsOpen--;renderReviewers();}
+
+function renderDash(){
+  const n=s=>runs.filter(r=>r.state===s).length;
+  const spend=runs.reduce((a,r)=>a+r.credits,0);
+  $('#tiles').innerHTML=[['Running',n('running')+n('verifying')],['Blocked on a human',n('blocked')],['Ready for review',n('ready')],['Credits today',spend.toFixed(2)]].map(t=>'<div class="tile"><b>'+t[1]+'</b><span>'+t[0]+'</span></div>').join('');
+  $('#dashRows').innerHTML=runs.map(r=>'<tr><td><b>'+r.prd+'</b></td><td>'+r.who+'</td><td><span class="chip '+DSTATE[r.state]+'">'+r.state+'</span></td><td>'+r.round+'</td><td>'+r.credits.toFixed(2)+'</td><td class="mut">'+r.note+'</td></tr>').join('');
+}
+function dash(patch){const r=runs.find(x=>x.prd==='PRD-142');if(!r)return;Object.assign(r,patch);renderDash();}
+function showDash(){$('#cardDash').classList.remove('hidden');runs.push({prd:'PRD-142',who:'Mohan',state:'running',round:1,credits:0.12,note:'gate passed'});renderDash();}
+
+function buildPrd(){
+  $('#prd').innerHTML=
+   '<h3><span>PRD document</span><span class="chip draft" id="prdStatus">draft</span></h3>'+
+   '<div class="prd-head reveal" id="r-head"><div><div class="t">PRD-142 Users API and admin form</div><div class="meta">Author: Mohan · Target repo: acme/web-app (.NET API, React UI) · Ticket: optional link</div></div></div>'+
+   '<div class="reveal" id="r-goal"><h4>Goal</h4><p>Admins can create, edit and soft delete users from a new Users page backed by a new REST endpoint.</p></div>'+
+   '<div class="reveal" id="r-data"><h4>Data source</h4><table><tr><th>Table</th><td><code>users</code></td></tr><tr><th>Columns</th><td><code>id uuid, email text unique, name text, role text, deleted_at timestamptz null, created_at, updated_at</code></td></tr></table></div>'+
+   '<h4>Conditions (each one needs a check)</h4><div id="conds">'+conds.map(c=>'<div class="cond reveal" id="c-'+c.id+'"><b>'+c.id+'</b><span class="tag">'+c.kind+'</span><p>'+c.text+'</p><span class="chip draft">draft</span></div>').join('')+'</div>'+
+   '<div class="reveal" id="r-rules"><h4>Rules</h4><ul><li>Soft delete only. No hard delete anywhere.</li><li>Parameterized queries only.</li><li>Follow the existing controller, service and repository layering.</li></ul><h4>Out of scope</h4><ul id="oos"><li>Authentication and permissions</li><li>Pagination</li></ul></div>';
+}
+function buildReview(){
+  $('#lint').innerHTML='';$('#thread').innerHTML='';$('#shareBox').classList.add('hidden');
+  approvals=[false,false,false];threadsOpen=0;renderReviewers();
+  const s=$('#rvStatus');s.className='chip pending';s.textContent='not shared';
+}
+function buildLoop(){jobs=JSON.parse(JSON.stringify(JOBS0));renderJobs();$('#log').innerHTML='';$('#inbox').innerHTML='';meters(0,0,0);}
+function buildMr(){$('#mrBody').innerHTML='';const s=$('#mrStatus');s.className='chip review';s.textContent='awaiting human';}
+function buildStepper(){$('#stepper').innerHTML=STAGES.map((s,i)=>'<div class="st"><b>Step '+(i+1)+'</b>'+s+'</div>').join('');}
+
+function verify(results,round,cost,turns){
+  allChips('running',false);
+  conds.forEach((c,i)=>later(()=>{setChip(c.id,results[c.id]?'pass':'fail');
+    log('verifier',c.id+' '+(results[c.id]?'<span class="ok">pass</span> '+c.ev:'<span class="bad">fail</span> '+(c.id==='C2'?'GET returned 3 rows, 1 has deleted_at set':'deleted user reappeared after reload')));},300+i*260));
+  meters(round,turns,cost);dash({round:round,credits:cost});
+}
+
+const steps=[
+{st:0,ms:900,cap:'The author fills in the fixed PRD template. The template forces a goal, the data source and testable conditions.',run(){show('r-head');show('r-goal');}},
+{st:0,ms:900,cap:'Data source first: which table, which columns. This is what the agents read instead of guessing.',run(){show('r-data');}},
+{st:0,ms:1900,cap:'Conditions are the contract. Each one says what must be true and how it will be checked.',run(){conds.forEach((c,i)=>show('c-'+c.id,i*.18));}},
+{st:0,ms:900,cap:'Rules and out-of-scope keep the agents inside the lines.',run(){show('r-rules');}},
+{st:0,ms:2200,cap:'GitLab CI runs "autopilot lint" on the PRD MR. It rejects conditions that cannot be checked.',run(){
+  lint('Linting 8 conditions...','mut');
+  conds.forEach(c=>{if(c.id==='C2'){lint('C2 rejected: which users? in what order? how would a test fail?','bad');setChip('C2','lintfail');}else{lint(c.id+' ok, check: '+c.chk,'ok');setChip(c.id,'ready');}});}},
+{st:0,ms:1500,cap:'The author rewrites C2 so a test could actually fail. Lint passes.',run(){
+  conds[1].text=C2_FIXED;setText('C2',C2_FIXED);setChip('C2','ready');lint('C2 ok, check: xunit','ok');lint('Lint passed: 8 of 8 conditions have a check','ok');}},
+{st:1,ms:1500,cap:'The author shares the GitLab MR link with peers. Reviewers are chosen by CODEOWNERS. No Jira needed.',run(){
+  $('#shareBox').classList.remove('hidden');renderReviewers();const s=$('#rvStatus');s.className='chip review';s.textContent='in review';
+  const p=$('#prdStatus');p.className='chip review';p.textContent='in review';}},
+{st:1,ms:2000,cap:'A reviewer challenges a condition. This is where the team debates scope, before any code exists.',run(){
+  $('#c-C4').classList.add('hl');threadsOpen++;renderReviewers();
+  thr=say('Ben on C4','#f5b84b','Soft delete with no way back feels half done. Do we need restore?');}},
+{st:1,ms:2000,cap:'The author answers by tightening the PRD, not by chatting. The out-of-scope list gets the new item.',run(){
+  $('#c-C4').classList.remove('hl');
+  say('Author','#a78bfa','Not this ticket. Adding restore to out of scope.');
+  const li=document.createElement('li');li.className='new';li.textContent='Restore (undelete)';$('#oos').appendChild(li);resolve(thr);}},
+{st:1,ms:1900,cap:'A second reviewer finds an ambiguity that would have become a bug.',run(){
+  $('#c-C1').classList.add('hl');threadsOpen++;renderReviewers();
+  thr=say('Chen on C1','#3ecf8e','Is the duplicate email check case-insensitive?');}},
+{st:1,ms:1900,cap:'The condition is edited so the answer is part of the contract.',run(){
+  $('#c-C1').classList.remove('hl');
+  const t=conds[0].text+' Emails are case-insensitive and stored lowercase.';conds[0].text=t;setText('C1',t);
+  say('Author','#a78bfa','Yes. Updated C1.');resolve(thr);}},
+{st:1,ms:1200,cap:'Approvals come in. GitLab branch protection needs 2 approvals and zero unresolved threads.',run(){approvals[0]=true;renderReviewers();}},
+{st:1,ms:1200,cap:'Second approval. The gate is satisfied.',run(){approvals[1]=true;renderReviewers();}},
+{st:1,ms:1200,cap:'Third approval, optional.',run(){approvals[2]=true;renderReviewers();}},
+{st:2,ms:2200,cap:'Merging the PRD MR freezes it. Conditions are now immutable for this run. Agents can read them, not edit them.',run(){
+  allChips('locked',false);const p=$('#prdStatus');p.className='chip locked';p.textContent='approved and frozen prd@a91f3c';
+  const s=$('#rvStatus');s.className='chip approved';s.textContent='approved';}},
+{st:3,ms:2800,cap:'The author runs "autopilot run PRD-142" on their own machine. The gate asks GitLab first and refuses to start unless the PRD is approved and frozen. The runner uses the authors own Copilot seat.',run(){
+  showCard('Loop');showDash();
+  log('gate','MR !142 merged, 3 approvals (need 2), 0 open threads');
+  log('gate','PRD file hash a91f3c matches the frozen version');
+  log('runner','copilot -p as mohan (own seat), worktree .autopilot/PRD-142');
+  log('runner','emit run.started to POST /api/events');
+  log('planner','read prd@a91f3c, 8 conditions, 4 jobs created');meters(1,6,0.12);renderJobs();}},
+{st:3,ms:1600,cap:'The db agent claims the first job and works in its own worktree.',run(){
+  setJob('J1','running');log('db-agent','claimed J1, worktree wt-j1');log('db-agent','wrote Migrations/003_UsersSoftDelete.cs with DeletedAt DateTimeOffset?');log('db-agent','added unique index on lower(Email)');}},
+{st:3,ms:1300,cap:'Agents leave a handoff note. The next agent reads it instead of re-deriving context.',run(){
+  setJob('J1','done');log('db-agent','handoff: table ready, soft delete via DeletedAt, email unique on lower(Email)');meters(1,14,0.38);dash({credits:0.38,note:'J1 done'});}},
+{st:3,ms:1500,cap:'The API agent and the test agent work in parallel on disjoint files.',run(){
+  setJob('J2','running');setJob('J4','running');log('api-agent','claimed J2, writing UsersController.cs and UserService.cs');log('test-agent','claimed J4, writing xUnit and Playwright tests, one set per condition');}},
+{st:3,ms:2400,cap:'When the PRD does not say something, the agent asks a human instead of guessing. The dashboard shows it as blocked.',run(){
+  setJob('J2','blocked');
+  $('#inbox').innerHTML='<div class="inbox"><b>Question from api-agent (J2 blocked)</b><br>The PRD does not list the allowed values for role. Which values should validation accept?</div>';
+  log('api-agent','<span class="bad">blocked</span> role values not defined in PRD, asked in inbox');
+  log('runner','emit job.blocked, team chat notified');dash({state:'blocked',note:'J2 asks: allowed role values'});}},
+{st:3,ms:1800,cap:'A human answers. The answer is stored as an addendum and the conditions stay unchanged.',run(){
+  $('#inbox').innerHTML='<div class="inbox answered"><b>Answered by Asha</b><br>admin, member, viewer. Default is member. Saved to the PRD addendum, frozen conditions untouched.</div>';
+  setJob('J2','running');log('human','role in (admin, member, viewer), default member');log('api-agent','resumed J2');dash({state:'running',credits:0.60,note:'J2 resumed'});}},
+{st:3,ms:1500,cap:'The UI agent starts once the API contract exists.',run(){
+  setJob('J2','done');meters(1,27,0.88);log('api-agent','handoff: endpoints done, contract in openapi.yaml');
+  setJob('J3','running');log('ui-agent','claimed J3, UsersPage.tsx, UserForm.tsx, delete confirm dialog');dash({credits:0.88,note:'J3 running'});}},
+{st:3,ms:1400,cap:'All four jobs report done. Note that the agents saying done is not the proof.',run(){
+  setJob('J3','done');setJob('J4','done');meters(1,31,1.10);log('ui-agent','handoff: page wired to /api/users');log('test-agent','handoff: 8 test groups written');dash({credits:1.10,note:'jobs done, awaiting verify'});}},
+{st:4,ms:1500,cap:'A separate verifier takes over. It is a fresh Copilot session that sees the frozen PRD and the repo, never the coders reasoning, and it must run real checks.',run(){
+  log('loop','round 1 starts, verifier gets prd@a91f3c plus repo only');log('runner','second copilot -p session, no coder context');allChips('running',false);dash({state:'verifying',note:'verifier round 1'});}},
+{st:4,ms:3200,cap:'Round 1 result. Six conditions pass, two fail. The loop is about to prove its value.',run(){
+  verify({C1:1,C2:0,C3:1,C4:1,C5:1,C6:1,C7:1,C8:0},1,1.42,38);}},
+{st:4,ms:1900,cap:'The loop controller creates a fix job scoped to the failing conditions only. It never edits the PRD.',run(){
+  log('loop','2 of 8 failing (C2, C8). Round 1 of max 3. Creating fix job J5');
+  jobs.push({id:'J5',title:'Fix: hide soft-deleted users in list',agent:'api-agent',c:'C2, C8',s:'queued'});renderJobs();dash({state:'running',note:'round 1 failed C2, C8'});}},
+{st:3,ms:2000,cap:'A coder agent picks up the fix job.',run(){
+  setJob('J5','running');log('api-agent','claimed J5, UserRepository.List() is missing Where(u => u.DeletedAt == null)');log('api-agent','fixed UserRepository.List(), added regression test');dash({note:'fix job J5'});}},
+{st:3,ms:1200,cap:'Fix is handed back for verification.',run(){setJob('J5','done');meters(2,44,1.61);log('api-agent','handoff: list excludes soft-deleted rows');dash({round:2,credits:1.61,note:'J5 done'});}},
+{st:4,ms:3400,cap:'Round 2. The verifier re-runs all eight conditions, not only the two that failed, so regressions are caught.',run(){
+  log('loop','round 2 starts, full re-run of 8 conditions');dash({state:'verifying',note:'verifier round 2'});verify({C1:1,C2:1,C3:1,C4:1,C5:1,C6:1,C7:1,C8:1},2,1.93,51);}},
+{st:5,ms:1800,cap:'Every condition passes locally, so the loop stops and opens the code MR. These results come from the laptop, so they are claims until CI repeats them.',run(){
+  log('loop','8 of 8 passing locally, pushing feature/PRD-142');log('runner','MR !57 opened with the authors GitLab token');showCard('Mr');
+  dash({state:'verifying',round:2,credits:1.93,note:'MR !57 open, CI verify pending'});
+  const rows=conds.map(c=>'<tr><td><b>'+c.id+'</b></td><td><span class="chip pass">pass</span></td><td>'+(c.id==='C2'||c.id==='C8'?'round 2':'round 1')+'</td><td class="mono">'+c.ev+'</td></tr>').join('');
+  $('#mrBody').innerHTML='<div><b>feat: users API and admin form</b> <span class="mut">(PRD-142@a91f3c, branch feature/PRD-142)</span></div>'+
+   '<div class="meta">+412 -3 lines across 11 files · 2 rounds · 1.93 credits · author mohan · runner copilot-cli</div>'+
+   '<table style="margin-top:8px"><tr><th>Condition</th><th>Status</th><th>Passed in</th><th>Evidence (test and result)</th></tr>'+rows+'</table>'+
+   '<h4>Review notes</h4><ul><li>Deviations from PRD: none</li><li>Assumption recorded: role is admin, member or viewer (answered by Asha)</li><li>Unverified conditions: none</li></ul>';}},
+{st:6,ms:1700,cap:'Now the part a laptop cannot fake. The MR pipeline has a required job, autopilot-verify. It fetches the frozen PRD by hash and re-runs every check on a clean GitLab runner.',run(){
+  $('#mrBody').insertAdjacentHTML('beforeend','<h4>GitLab pipeline: autopilot-verify (required)</h4><div class="ci">'+conds.map(c=>'<div class="cirow"><b>'+c.id+'</b><span class="chip pending" id="ci-'+c.id+'">queued</span></div>').join('')+'</div>');
+  log('ci','pipeline #9001 started, job autopilot-verify, PRD hash a91f3c');
+  conds.forEach((c,i)=>later(()=>{const x=$('#ci-'+c.id);x.className='chip running';x.textContent='running';},i*120));}},
+{st:6,ms:2800,cap:'All eight checks pass on a clean runner, so the required job is green and the MR can be merged. If any had failed, the MR would be blocked whatever the local run claimed.',run(){
+  conds.forEach((c,i)=>later(()=>{const x=$('#ci-'+c.id);x.className='chip pass';x.textContent='pass';},300+i*220));
+  later(()=>{const s=$('#mrStatus');s.className='chip approved';s.textContent='checks passed, awaiting human';log('ci','8 of 8 passed, required job green');dash({state:'ready',note:'MR !57 ready for review'});},300+conds.length*220);}},
+{st:7,ms:0,cap:'Done. The reviewer reads 8 evidence rows and the green CI job, and still approves and merges. The dashboard shows the run as ready. Press Restart to replay.',run(){
+  $('#mrBody').insertAdjacentHTML('beforeend','<div class="stamp"><b>Ready for human review.</b> The reviewer checks conditions, evidence and the CI result, not 412 lines of diff.</div>');
+  setStage(7);}}
+];
+
+function updateProgress(){$('#progress').style.width=Math.round(idx/steps.length*100)+'%';}
+function setPlayBtn(){$('#bPlay').textContent=playing?'Pause':(idx>=steps.length?'Replay':'Play');}
+function runStep(){
+  const s=steps[idx];idx++;
+  if(s.st<7)setStage(s.st);
+  caption(s.cap);s.run();updateProgress();
+  if(idx>=steps.length){playing=false;setPlayBtn();return;}
+  if(playing)timer=setTimeout(runStep,s.ms/speed);
+}
+function reset(){
+  clearTimeout(timer);gen++;idx=0;clock=0;
+  conds=JSON.parse(JSON.stringify(COND0));
+  runs=JSON.parse(JSON.stringify(RUNS0));$('#cardDash').classList.add('hidden');
+  buildStepper();buildPrd();buildReview();buildLoop();buildMr();showCard('Review');setStage(0);updateProgress();
+}
+function start(){reset();playing=true;setPlayBtn();timer=setTimeout(runStep,500);}
+$('#bPlay').onclick=()=>{
+  if(idx>=steps.length){start();return;}
+  playing=!playing;setPlayBtn();clearTimeout(timer);if(playing)runStep();
+};
+$('#bStep').onclick=()=>{
+  clearTimeout(timer);playing=false;
+  if(idx>=steps.length)reset();
+  runStep();setPlayBtn();
+};
+$('#bRestart').onclick=start;
+$('#sSpeed').onchange=e=>{speed=parseFloat(e.target.value);};
+start();
+</script>
+</body>
+</html>
